@@ -13,3 +13,6 @@ print(result)
 # NOT Operators 
 result  = not(a > 5 and a < 20)
 print(result)
+
+str = "GFG"
+print(not (not(str and "")))
