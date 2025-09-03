@@ -1,67 +1,92 @@
 import tkinter as tk
 import re
 
-# helper function to format numbers nicely
+# ----------------------------
+# Helper Functions
+# ----------------------------
+
 def format_number(n):
+    """Format numbers nicely"""
     if isinstance(n, (int, float)):
-        return int(n) if isinstance(n, float) and n.is_integer() else n
+        if isinstance(n, float):
+            n = round(n, 8)
+            return int(n) if n.is_integer() else n
+        return n
     return n
 
 def get_internal_expr(display_expr):
-    """Convert pretty display expression to valid Python eval expression"""
+    """Convert display expression (× ÷ %) to Python eval"""
     expr = display_expr.replace("×", "*").replace("÷", "/")
-    expr = expr.replace("%", "/100")  # percentage
-    expr = expr.replace(")(", ")*(")  # (2)(3) -> (2)*(3)
-    expr = re.sub(r'(\d)\(', r'\1*(', expr)   # 4(2) -> 4*(2)
-    expr = re.sub(r'\)(\d)', r')*\1', expr)   # (2)3 -> (2)*3
+    expr = expr.replace("%", "/100")
+    expr = expr.replace(")(", ")*(")
+    expr = re.sub(r'(\d)\(', r'\1*(', expr)
+    expr = re.sub(r'\)(\d)', r')*\1', expr)
     return expr
 
+def safe_eval(expr):
+    """Safely evaluate expression for live result"""
+    try:
+        return format_number(eval(expr))
+    except:
+        return ""
+
+# ----------------------------
+# Event Handlers
+# ----------------------------
+
+def update_result():
+    """Show live result in the entry"""
+    current = entry.get()
+    if current.strip() == "":
+        result_var.set("")
+        return
+    internal_expr = get_internal_expr(current)
+    result_var.set(safe_eval(internal_expr))
+
 def on_click(symbol):
+    """Handle button clicks"""
+    current = entry.get()
+    
     if symbol == "=":
-        expr = entry.get()
-        try:
-            internal_expr = get_internal_expr(expr)
-            result = eval(internal_expr)
-            result = format_number(result)
-
+        # Move live result to entry
+        if result_var.get() != "":
             entry.delete(0, tk.END)
-            entry.insert(tk.END, str(result))
-
-        except ZeroDivisionError:
-            entry.delete(0, tk.END)
-            entry.insert(tk.END, "Error (Div by 0)")
-        except:
-            entry.delete(0, tk.END)
-            entry.insert(tk.END, "Error")
+            entry.insert(0, result_var.get())
+        return
 
     elif symbol == "AC":
         entry.delete(0, tk.END)
+        result_var.set("")
+        return
 
     elif symbol == "⌫":
-        current = entry.get()
         entry.delete(0, tk.END)
-        entry.insert(tk.END, current[:-1])
+        entry.insert(0, current[:-1])
+        update_result()
+        return
 
-    elif symbol == "()":  # auto-insert parentheses
-        current = entry.get()
+    elif symbol == "()":
         if current.count("(") == current.count(")"):
             entry.insert(tk.END, "(")
         else:
             entry.insert(tk.END, ")")
+        update_result()
+        return
 
     else:
-        # Replace operators for display
         if symbol == "*":
             symbol = "×"
         elif symbol == "/":
             symbol = "÷"
+
+        if current and current[-1] in "+-×÷%" and symbol in "+-×÷%":
+            entry.delete(len(current)-1, tk.END)
+
         entry.insert(tk.END, symbol)
+        update_result()
 
-    entry.focus()
-
-
-# Handle keyboard input
 def on_key(event):
+    """Handle keyboard input"""
     key = event.keysym
     if key.isdigit() or key in ["parenleft", "parenright", "period"]:
         entry.insert(tk.END, event.char)
@@ -74,25 +99,64 @@ def on_key(event):
     elif key == "percent":
         entry.insert(tk.END, "%")
     elif key == "Return":
-        on_click("=")
+        if result_var.get() != "":
+            entry.delete(0, tk.END)
+            entry.insert(0, result_var.get())
     elif key == "BackSpace":
-        on_click("⌫")
+        entry.delete(len(entry.get())-1, tk.END)
     elif key == "Escape":
-        on_click("AC")
+        entry.delete(0, tk.END)
+        result_var.set("")
+    update_result()
 
+# ----------------------------
+# Hover and Press Effects
+# ----------------------------
 
-# Main window
+def lighten_color(color, factor=1.2):
+    color = color.lstrip('#')
+    r = min(int(int(color[0:2],16)*factor),255)
+    g = min(int(int(color[2:4],16)*factor),255)
+    b = min(int(int(color[4:6],16)*factor),255)
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+def on_enter(e):
+    e.widget.configure(bg=lighten_color(e.widget.original_bg, 1.2))
+
+def on_leave(e):
+    e.widget.configure(bg=e.widget.original_bg)
+
+def on_press(e):
+    e.widget.configure(relief="sunken")
+    e.widget.after(100, lambda: e.widget.configure(relief="ridge"))
+
+# ----------------------------
+# Main Window Setup
+# ----------------------------
+
 root = tk.Tk()
-root.title("Simple Calculator")
-root.configure(bg="white")  # white theme
+root.title("Live Calculator")
+root.configure(bg="white")
 
-# Entry display
-entry = tk.Entry(root, width=20, font=("Arial", 18), bd=5,
-                 relief="ridge", justify="right", bg="white", fg="black")
-entry.grid(row=0, column=0, columnspan=4, pady=5, padx=5)
+# Make window resizable
+root.rowconfigure(0, weight=1)
+for i in range(1,6):
+    root.rowconfigure(i, weight=1)
+for j in range(4):
+    root.columnconfigure(j, weight=1)
+
+# Entry
+entry = tk.Entry(root, font=("Arial", 24), bd=5, relief="ridge",
+                 justify="right", bg="white", fg="black")
+entry.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=5, pady=5)
 entry.focus()
 
-# Buttons layout
+# Live result variable
+result_var = tk.StringVar()
+result_label = tk.Label(root, textvariable=result_var, font=("Arial",14), anchor="e", bg="white", fg="green")
+result_label.grid(row=1, column=0, columnspan=4, sticky="nsew", padx=5, pady=(0,5))
+
+# Buttons
 buttons = [
     ["AC", "()", "%", "÷"],
     ["7", "8", "9", "×"],
@@ -101,43 +165,29 @@ buttons = [
     ["0", ".", "⌫", "="]
 ]
 
-# Button styles
-btn_style = {
-    "font": ("Arial", 16),
-    "width": 5,
-    "height": 2,
-    "bd": 1,
-    "relief": "ridge"
-}
+btn_style = {"font":("Arial",18), "bd":1, "relief":"ridge"}
 
-# Colors for white theme
-colors = {
-    "AC": {"bg": "#d9534f", "fg": "white"},   # red
-    "=": {"bg": "#0275d8", "fg": "white"},    # dark blue
-    "operators": {"bg": "#5bc0de", "fg": "white"},  # light blue
-    "delete": {"bg": "#6c757d", "fg": "white"},     # gray
-    "numbers": {"bg": "#f0f0f0", "fg": "black"}     # light gray
-}
+button_refs = {}
+for r, row in enumerate(buttons,2):
+    for c,symbol in enumerate(row):
+        btn = tk.Button(root, text=symbol, command=lambda s=symbol: on_click(s), **btn_style)
+        btn.grid(row=r, column=c, sticky="nsew", padx=2, pady=2)
+        button_refs[btn] = symbol
+        if symbol=="AC":
+            btn.configure(bg="#d9534f", fg="white")
+        elif symbol=="=":
+            btn.configure(bg="#0275d8", fg="white")
+        elif symbol in ["+","-","×","÷","%"]:
+            btn.configure(bg="#5bc0de", fg="white")
+        elif symbol=="⌫":
+            btn.configure(bg="#6c757d", fg="white")
+        else:
+            btn.configure(bg="#f0f0f0", fg="black")
+        btn.original_bg = btn.cget("bg")
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+        btn.bind("<Button-1>", on_press)
 
-# Place buttons
-for r, row in enumerate(buttons, 1):
-    for c, symbol in enumerate(row):
-        style = colors["numbers"]  # default
-
-        if symbol == "AC":
-            style = colors["AC"]
-        elif symbol == "=":
-            style = colors["="]
-        elif symbol in ["+", "-", "×", "÷", "%"]:
-            style = colors["operators"]
-        elif symbol == "⌫":
-            style = colors["delete"]
-
-        tk.Button(root, text=symbol,
-                  command=lambda s=symbol: on_click(s),
-                  bg=style["bg"], fg=style["fg"], **btn_style).grid(row=r, column=c, padx=2, pady=2)
-
-# Bind keyboard events
 root.bind("<Key>", on_key)
 
 root.mainloop()
