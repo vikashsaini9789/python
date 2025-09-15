@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Professional Scientific Calculator</title>
+<style>
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #eceff1;
+}
+
+.calculator {
+    width: 100%;
+    max-width: 450px;
+    background: #212121;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    color: white;
+}
+
+/* Display & Result */
+#display, #result {
+    width: 100%;
+    text-align: right;
+    padding: 0 15px;
+    box-sizing: border-box;
+    margin: 0;
+    border-radius: 10px;
+    font-weight: bold;
+}
+#display {
+    height: 60px;
+    font-size: 2rem;
+    line-height: 60px; 
+    background: #424242;
+    color: #fff;
+    margin-bottom: 8px;
+}
+#result {
+    min-height: 22px;
+    font-size: 1.2rem;
+    line-height: 22px;
+    color: #81c784;
+    background: #2e2e2e;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 15px;
+}
+
+/* Buttons Grid */
+.buttons {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+}
+button {
+    padding: 14px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.1s;
+    font-weight: bold;
+    white-space: nowrap;
+}
+button:active { transform: scale(0.95); }
+
+/* Button Colors */
+.number { background: #616161; color: #fff; }
+.operator { background: #0288d1; color: #fff; }
+.scientific { background: #f57c00; color: #fff; }
+.clear { background: #d32f2f; color: #fff; }
+.equal { background: #00796b; color: #fff; }
+.delete { background: #757575; color: #fff; }
+#toggleMode { background: #f57c00; color: #fff; }
+
+/* Responsive */
+@media (max-width: 500px) {
+    #display { font-size: 1.5rem; height: 50px; line-height: 50px; }
+    #result { font-size: 1rem; line-height: 20px; }
+    button { padding: 10px; font-size: 0.85rem; }
+}
+</style>
+</head>
+<body>
+<div class="calculator">
+    <input type="text" id="display" placeholder="0" readonly>
+    <div id="result"></div>
+
+    <div class="buttons">
+        <!-- Row 1 -->
+        <button class="clear">C</button>
+        <button class="scientific">()</button>
+        <button class="scientific">%</button>
+        <button class="delete">⌫</button>
+        <button class="scientific">^</button>
+        <button id="toggleMode" class="scientific">Rad</button>
+
+        <!-- Row 2 -->
+        <button class="scientific">sin</button>
+        <button class="scientific">cos</button>
+        <button class="scientific">tan</button>
+        <button class="scientific">asin</button>
+        <button class="scientific">acos</button>
+        <button class="scientific">atan</button>
+
+        <!-- Row 3 -->
+        <button class="scientific">sinh</button>
+        <button class="scientific">cosh</button>
+        <button class="scientific">tanh</button>
+        <button class="scientific">ln</button>
+        <button class="scientific">log</button>
+        <button class="scientific">√</button>
+
+        <!-- Row 4 -->
+        <button class="number">7</button>
+        <button class="number">8</button>
+        <button class="number">9</button>
+        <button class="operator">÷</button>
+        <button class="operator">×</button>
+        <button class="scientific">!</button>
+
+        <!-- Row 5 -->
+        <button class="number">4</button>
+        <button class="number">5</button>
+        <button class="number">6</button>
+        <button class="operator">-</button>
+        <button class="operator">+</button>
+        <!-- = button removed from here -->
+
+        <!-- Row 6 -->
+        <button class="number">1</button>
+        <button class="number">2</button>
+        <button class="number">3</button>
+        <button class="number">0</button>
+        <button class="number">.</button>
+        <button class="equal">=</button> <!-- Only one = at bottom-right -->
+    </div>
+</div>
+
+<script>
+const display = document.getElementById("display");
+const resultDiv = document.getElementById("result");
+let mode = "rad";
+
+document.getElementById("toggleMode").addEventListener("click", () => {
+    mode = mode === "rad" ? "deg" : "rad";
+    document.getElementById("toggleMode").textContent = mode === "rad" ? "Rad" : "Deg";
+    updateResult();
+});
+
+document.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const value = btn.textContent;
+        if(value === "C") {
+            display.value = "";
+            resultDiv.textContent = "";
+        } else if(value === "⌫") {
+            display.value = display.value.slice(0,-1);
+            updateResult();
+        } else if(value === "=") {
+            display.value = resultDiv.textContent || display.value;
+            resultDiv.textContent = "";
+        } else if(value === "()") {
+            if((display.value.match(/\(/g)||[]).length === (display.value.match(/\)/g)||[]).length){
+                display.value += "(";
+            } else { display.value += ")"; }
+            updateResult();
+        } else { display.value += value; updateResult(); }
+    });
+});
+
+function updateResult() {
+    fetch("/api/calc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expression: display.value, mode })
+    })
+    .then(res => res.json())
+    .then(data => { resultDiv.textContent = data.result; });
+}
+</script>
+</body>
+</html>

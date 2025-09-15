@@ -108,6 +108,7 @@ def on_key(event):
         entry.delete(0, tk.END)
         result_var.set("")
     update_result()
+    return "break"      #prevent double key insertion
 
 # ----------------------------
 # Hover and Press Effects
@@ -188,6 +189,7 @@ for r, row in enumerate(buttons,2):
         btn.bind("<Leave>", on_leave)
         btn.bind("<Button-1>", on_press)
 
-root.bind("<Key>", on_key)
+entry.bind("<KeyPress>", on_key)
 
 root.mainloop()
+

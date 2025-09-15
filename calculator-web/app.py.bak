@@ -1,0 +1,262 @@
+from flask import Flask, render_template_string, request, jsonify
+import re
+
+app = Flask(__name__)
+
+# ----------------------------
+# Calculator Logic
+# ----------------------------
+def format_number(n):
+    if isinstance(n, (int, float)):
+        if isinstance(n, float):
+            n = round(n, 8)
+            return int(n) if n.is_integer() else n
+        return n
+    return n
+
+def get_internal_expr(display_expr):
+    expr = display_expr.replace("×", "*").replace("÷", "/")
+    expr = expr.replace("%", "/100")
+    expr = expr.replace(")(", ")*(")
+    expr = re.sub(r'(\d)\(', r'\1*(', expr)
+    expr = re.sub(r'\)(\d)', r')*\1', expr)
+    return expr
+
+def safe_eval(expr):
+    try:
+        return format_number(eval(expr))
+    except:
+        return ""
+
+# ----------------------------
+# Routes
+# ----------------------------
+@app.route("/")
+def home():
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Python Calculator</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                display: flex; 
+                justify-content: center; 
+                align-items: center; 
+                height: 100vh; 
+                background: #f7f7f7; 
+                margin: 0; 
+            }
+            .calc { 
+                background: #fff; 
+                padding: 20px; 
+                border-radius: 15px; 
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2); 
+                width: 90%; 
+                max-width: 360px; 
+            }
+            .display { 
+                width: 100%; 
+                font-size: 6vw; 
+                max-font-size: 28px;
+                padding: 12px; 
+                margin-bottom: 5px; 
+                text-align: right; 
+                border: 1px solid #ccc; 
+                border-radius: 8px; 
+                box-sizing: border-box;
+            }
+            .preview { 
+                width: 100%; 
+                font-size: 4vw; 
+                max-font-size: 18px;
+                color: green; 
+                text-align: right; 
+                min-height: 20px; 
+                margin-bottom: 12px; 
+            }
+            .buttons { 
+                display: grid; 
+                grid-template-columns: repeat(4, 1fr); 
+                gap: 10px; 
+            }
+            button { 
+                font-size: 5vw; 
+                padding: 15px; 
+                border: none; 
+                border-radius: 8px; 
+                cursor: pointer; 
+                transition: background 0.2s, transform 0.1s; 
+                width: 100%; 
+            }
+            button:active { transform: scale(0.95); }
+            .op { background: #5bc0de; color: white; }
+            .eq { background: #0275d8; color: white; grid-column: span 2; }
+            .ac { background: #d9534f; color: white; }
+            .del { background: #6c757d; color: white; }
+            .num { background: #f0f0f0; }
+            .active { box-shadow: inset 0 0 5px #333; filter: brightness(85%); }
+
+            @media (max-width: 480px) {
+                .calc { padding: 15px; }
+                .display { font-size: 7vw; }
+                .preview { font-size: 5vw; }
+                button { font-size: 6vw; padding: 12px; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="calc">
+            <input type="text" id="display" class="display" readonly>
+            <div id="preview" class="preview"></div>
+            <div class="buttons">
+                <button id="btn-AC" class="ac" onclick="clearDisplay()">AC</button>
+                <button id="btn-()" class="op" onclick="addSymbol('()')">()</button>
+                <button id="btn-%" class="op" onclick="addSymbol('%')">%</button>
+                <button id="btn-÷" class="op" onclick="addSymbol('÷')">÷</button>
+
+                <button id="btn-7" class="num" onclick="addSymbol('7')">7</button>
+                <button id="btn-8" class="num" onclick="addSymbol('8')">8</button>
+                <button id="btn-9" class="num" onclick="addSymbol('9')">9</button>
+                <button id="btn-×" class="op" onclick="addSymbol('×')">×</button>
+
+                <button id="btn-4" class="num" onclick="addSymbol('4')">4</button>
+                <button id="btn-5" class="num" onclick="addSymbol('5')">5</button>
+                <button id="btn-6" class="num" onclick="addSymbol('6')">6</button>
+                <button id="btn--" class="op" onclick="addSymbol('-')">-</button>
+
+                <button id="btn-1" class="num" onclick="addSymbol('1')">1</button>
+                <button id="btn-2" class="num" onclick="addSymbol('2')">2</button>
+                <button id="btn-3" class="num" onclick="addSymbol('3')">3</button>
+                <button id="btn-+" class="op" onclick="addSymbol('+')">+</button>
+
+                <button id="btn-0" class="num" onclick="addSymbol('0')">0</button>
+                <button id="btn-." class="num" onclick="addSymbol('.')">.</button>
+                <button id="btn-⌫" class="del" onclick="backspace()">⌫</button>
+                <button id="btn-=" class="eq" onclick="calculate()">=</button>
+            </div>
+        </div>
+
+        <script>
+            const disp = document.getElementById("display");
+
+            function addSymbol(symbol) {
+                if (symbol === "()") {
+                    let countL = (disp.value.match(/\\(/g) || []).length;
+                    let countR = (disp.value.match(/\\)/g) || []).length;
+                    symbol = (countL === countR) ? "(" : ")";
+                }
+                disp.value += symbol;
+                updatePreview();
+            }
+
+            function clearDisplay() {
+                disp.value = "";
+                document.getElementById("preview").innerText = "";
+            }
+
+            function backspace() {
+                disp.value = disp.value.slice(0, -1);
+                updatePreview();
+            }
+
+            function calculate() {
+                let expr = disp.value;
+                fetch("/api/calc", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ expression: expr })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    disp.value = data.result;
+                    document.getElementById("preview").innerText = "";
+                });
+            }
+
+            function updatePreview() {
+                let expr = disp.value;
+                if (expr.trim() === "") {
+                    document.getElementById("preview").innerText = "";
+                    return;
+                }
+                fetch("/api/calc", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ expression: expr })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("preview").innerText = data.result !== "" ? data.result : "";
+                });
+            }
+
+            // Button Flash Effect
+            function flashButton(id) {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.classList.add("active");
+                    setTimeout(() => btn.classList.remove("active"), 150);
+                }
+            }
+
+            // Keyboard Support
+            document.addEventListener("keydown", function(event) {
+                if ((event.key >= "0" && event.key <= "9") || event.key === ".") {
+                    disp.value += event.key;
+                    updatePreview();
+                    flashButton("btn-" + event.key);
+                } else if (event.key === "+") {
+                    disp.value += "+";
+                    updatePreview();
+                    flashButton("btn-+");
+                } else if (event.key === "-") {
+                    disp.value += "-";
+                    updatePreview();
+                    flashButton("btn--");
+                } else if (event.key === "*") {
+                    disp.value += "×";
+                    updatePreview();
+                    flashButton("btn-×");
+                } else if (event.key === "/") {
+                    disp.value += "÷";
+                    updatePreview();
+                    flashButton("btn-÷");
+                } else if (event.key === "%") {
+                    disp.value += "%";
+                    updatePreview();
+                    flashButton("btn-%");
+                } else if (event.key === "(" || event.key === ")") {
+                    disp.value += event.key;
+                    updatePreview();
+                    flashButton("btn-()");
+                } else if (event.key === "Enter") {
+                    calculate();
+                    flashButton("btn-=");
+                } else if (event.key === "Backspace") {
+                    backspace();
+                    flashButton("btn-⌫");
+                } else if (event.key === "Escape") {
+                    clearDisplay();
+                    flashButton("btn-AC");
+                }
+                event.preventDefault();
+            });
+        </script>
+    </body>
+    </html>
+    """)
+
+@app.route("/api/calc", methods=["POST"])
+def api_calc():
+    data = request.get_json()
+    expr = data.get("expression", "")
+    internal_expr = get_internal_expr(expr)
+    result = safe_eval(internal_expr)
+    return jsonify({"result": result})
+
+if __name__ == "__main__":
+    app.run(debug=True)
